@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lyrics to Morse Code and MIDI Generator</title>
+    <link rel="stylesheet" href="tailwind-output.css">
+    <!-- VexFlow for musical staff -->
+    <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/midi-writer-js/browser/midiwriter.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body class="min-h-screen">
+    <header class="header-bg text-white py-12 mb-8">
+        <div class="container mx-auto px-4 max-w-4xl text-left">
+            <h1 class="text-4xl font-bold mb-2">Lyrics to Morse Code and MIDI Generator</h1>
+            <p class="text-white italic">Translate your lyrics into morse code and musical notation in real-time.</p>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 max-w-4xl pb-16">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+            <!-- Lyrics Block -->
+            <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+                <label for="lyrics-input" class="block text-xl font-bold mb-4 pb-2 section-header">Lyrics</label>
+                <textarea id="lyrics-input" 
+                    class="w-full h-64 p-4 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                    placeholder="Enter your lyrics here..."></textarea>
+            </div>
+
+            <!-- Morse Block -->
+            <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+                <h2 class="text-xl font-bold mb-4 pb-2 section-header">Morse Code</h2>
+                <div id="morse-output" 
+                    class="w-full h-64 p-4 bg-white border border-gray-200 rounded overflow-y-auto font-mono break-words whitespace-pre-wrap"></div>
+            </div>
+        </div>
+
+        <!-- Staff Block -->
+        <div class="bg-white p-6 rounded-lg shadow-sm staff-block">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 pb-2 section-header gap-4">
+                <h2 class="text-xl font-bold">Musical Staff</h2>
+                <div class="flex flex-wrap items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <label for="rhythm-select" class="text-sm font-semibold">Rhythm:</label>
+                        <select id="rhythm-select" class="border border-gray-300 rounded px-2 py-1 text-sm">
+                            <option value="4/4">4/4</option>
+                            <option value="3/4">3/4</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="play-audio" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-semibold transition-colors flex items-center gap-2">
+                            <span id="play-icon">▶</span> Play
+                        </button>
+                    </div>
+                    <button id="download-midi" class="btn-primary text-white px-4 py-2 rounded text-sm font-semibold transition-colors">
+                        Download MIDI
+                    </button>
+                    <button id="download-pdf" class="btn-primary text-white px-4 py-2 rounded text-sm font-semibold transition-colors">
+                        Download PDF
+                    </button>
+                </div>
+            </div>
+            <div id="staff-container" class="w-full min-h-[200px] flex justify-start p-4">
+                <div id="staff-output"></div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-gray-800 text-gray-400 py-8 text-center text-sm">
+        <div class="container mx-auto px-4">
+            <p>&copy; 2026 Lyrics to Morse Code and MIDI Generator</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
