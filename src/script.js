@@ -27,6 +27,8 @@ const playIcon = document.getElementById('play-icon');
 let audioContext = null;
 let isPlaying = false;
 let playbackTimeout = null;
+let visualTimeouts = [];
+let activeOscillators = [];
 let currentNoteIndex = -1;
 let noteElements = [];
 let noteTimings = [];
@@ -401,6 +403,8 @@ function updateStaff(mappings) {
 }
 
 function playNote(freq, startTime, duration) {
+    if (!audioContext) return;
+
     const osc = audioContext.createOscillator();
     const gain = audioContext.createGain();
 
@@ -417,6 +421,11 @@ function playNote(freq, startTime, duration) {
 
     osc.start(startTime);
     osc.stop(startTime + duration);
+    
+    activeOscillators.push(osc);
+    osc.onended = () => {
+        activeOscillators = activeOscillators.filter(o => o !== osc);
+    };
 }
 
 function stopPlayback() {
@@ -425,10 +434,30 @@ function stopPlayback() {
     playAudioBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
     playAudioBtn.classList.add('bg-green-600', 'hover:bg-green-700');
     
-    if (playbackTimeout) clearTimeout(playbackTimeout);
+    if (playbackTimeout) {
+        clearTimeout(playbackTimeout);
+        playbackTimeout = null;
+    }
+    
+    visualTimeouts.forEach(t => clearTimeout(t));
+    visualTimeouts = [];
+    
+    activeOscillators.forEach(osc => {
+        try {
+            osc.stop();
+        } catch (e) {
+            // Oscillator might have already stopped
+        }
+    });
+    activeOscillators = [];
     
     // Clear highlights
-    noteElements.forEach(el => el.classList.remove('fill-red-500', 'text-red-500'));
+    noteElements.forEach(el => {
+        if (el) {
+            el.classList.remove('fill-red-500', 'text-red-500', 'highlight-note');
+            el.querySelectorAll('path').forEach(p => p.style.fill = '');
+        }
+    });
     currentNoteIndex = -1;
 }
 
@@ -454,7 +483,7 @@ function startPlayback() {
         }
         
         // Schedule visual highlight
-        setTimeout(() => {
+        const vTimeout = setTimeout(() => {
             if (!isPlaying) return;
             
             // Remove previous highlight
@@ -471,6 +500,7 @@ function startPlayback() {
                 noteElements[currentNoteIndex].querySelectorAll('path').forEach(p => p.style.fill = '#ef4444');
             }
         }, (timing.time + 0.1) * 1000);
+        visualTimeouts.push(vTimeout);
     });
 
     const totalDuration = noteTimings.length > 0 ? 
