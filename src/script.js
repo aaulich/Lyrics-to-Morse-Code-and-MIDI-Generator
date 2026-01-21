@@ -144,8 +144,6 @@ function updateStaff(mappings) {
         }
     });
 
-    console.log("Sequence for debugging:", sequence.map(s => `${s.type}:${s.duration}`).join(', '));
-
     // 2. Group into bars with splitting
     const barData = [];
     let currentBar = [];
@@ -220,12 +218,6 @@ function updateStaff(mappings) {
         barData.push(currentBar);
     }
 
-    console.log("Bar data for debugging:");
-    barData.forEach((bar, i) => {
-        const totalUnits = bar.reduce((sum, note) => sum + note.duration, 0);
-        console.log(`Bar ${i + 1}: ${totalUnits} units - ${bar.map(n => `${n.type}:${n.duration}`).join(', ')}`);
-    });
-
     // 3. Convert barData to VexFlow bars and calculate timings
     const bars = [];
     const ties = [];
@@ -237,13 +229,10 @@ function updateStaff(mappings) {
 
     barData.forEach((barNotesData, barIndex) => {
         const barNotes = [];
-        console.log(`Creating VexFlow notes for Bar ${barIndex + 1}:`);
         barNotesData.forEach((data, noteIndex) => {
             let note = null;
             let durationStr = data.duration === 1 ? '8' : '4';
             if (data.type === 'rest') durationStr += 'r';
-
-            console.log(`  Note ${noteIndex + 1}: type=${data.type}, duration=${data.duration}, vexDuration=${durationStr}, mChar=${data.mChar}`);
 
             note = new StaveNote({
                 keys: ['b/4'],
@@ -253,11 +242,9 @@ function updateStaff(mappings) {
 
             if (data.lyric) {
                 addLyricToNote(note, data.lyric, Annotation, Flow);
-                console.log(`    Added lyric: ${data.lyric}`);
             }
 
             barNotes.push(note);
-            console.log(`    Note object created successfully, barNotes.length now: ${barNotes.length}`);
 
             // Handle ties for split notes
             if (data.tieNext) {
@@ -360,18 +347,6 @@ function updateStaff(mappings) {
                 }
                 stave.setContext(currentContext).draw();
 
-                // Calculate actual beats in this bar
-                const actualBeats = barNotes.reduce((sum, note) => {
-                    const dur = note.getDuration();
-                    if (dur === '8' || dur === '8r') return sum + 0.5;
-                    if (dur === '4' || dur === '4r') return sum + 1;
-                    if (dur === '2' || dur === '2r') return sum + 2;
-                    if (dur === '1' || dur === '1r') return sum + 4;
-                    return sum;
-                }, 0);
-
-                console.log(`Bar ${index + 1}: Adding ${barNotes.length} notes to voice, total beats: ${actualBeats}, expected: ${beatsPerBar}`);
-
                 const voice = new Voice({
                     num_beats: beatsPerBar,
                     beat_value: beatValue
@@ -380,10 +355,9 @@ function updateStaff(mappings) {
                 voice.addTickables(barNotes);
 
                 // Use formatter to justify notes within the bar
-                new Formatter().joinVoices([voice]).format([voice], staveWidth - 60);
+                new Formatter().joinVoices([voice]).format([voice], staveWidth - 80);
 
                 voice.draw(currentContext, stave);
-                console.log(`Bar ${index + 1}: Successfully drawn`);
                 
             } catch (e) {
                 console.error("Error drawing bar " + index, e);
