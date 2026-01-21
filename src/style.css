@@ -1,0 +1,79 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+/* @import "tailwindcss"; - This is handled by tailwind-output.css */
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f9fafb;
+    color: #1f2937;
+}
+
+.header-bg {
+    background-color: #0c5385;
+}
+
+.section-header {
+    color: #0c5385;
+    border-bottom: 2px solid #0c5385;
+}
+
+.btn-primary:not(:disabled) {
+    background-color: #0c5385;
+    cursor: pointer;
+}
+
+button:not(:disabled), select {
+    cursor: pointer;
+}
+
+button:disabled {
+    cursor: not-allowed;
+}
+
+.btn-primary:hover {
+    background-color: #0b4a76;
+}
+
+#morse-output {
+    background-color: white !important;
+}
+
+@media print {
+    body {
+        background-color: white !important;
+    }
+    header, footer, .section-header, #play-audio, #download-midi, #download-pdf, #rhythm-select, label[for="rhythm-select"], .grid {
+        display: none !important;
+    }
+    main {
+        margin: 0 !important;
+        padding: 0 !important;
+        max-width: none !important;
+    }
+    .bg-white {
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+    }
+    #staff-container {
+        padding: 0 !important;
+    }
+    #staff-output {
+        width: 100% !important;
+    }
+    /* Hide everything that is not the staff container when printing */
+    body > *:not(main) {
+        display: none !important;
+    }
+    main > *:not(.staff-block) {
+        display: none !important;
+    }
+    .staff-block {
+        display: block !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .staff-block h2 {
+        display: none !important;
+    }
+}
