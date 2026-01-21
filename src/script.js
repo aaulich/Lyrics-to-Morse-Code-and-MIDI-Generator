@@ -116,6 +116,7 @@ function updateStaff(mappings) {
     const timeSignature = rhythmSelect.value; // "4/4" or "3/4"
     const [numBeats, beatValue] = timeSignature.split('/').map(Number);
     const beatsPerBar = numBeats;
+    const unitsPerBar = beatsPerBar * 2; // 1 unit = 0.5 beats (8th note)
 
     const { Renderer, Stave, StaveNote, Voice, Formatter, Beam, Annotation, StaveTie } = Flow;
 
@@ -123,79 +124,160 @@ function updateStaff(mappings) {
     const maxChars = 200; // Increased to allow more lyrics on multiple pages
     const displayMappings = mappings.slice(0, maxChars);
 
-    // Group notes into bars
-    const bars = [];
-    let currentBarNotes = [];
-    let currentBarBeats = 0;
-    const ties = [];
-
-    displayMappings.forEach(mapping => {
+    // 1. Generate flat sequence of musical events
+    const sequence = [];
+    displayMappings.forEach((mapping, mapIdx) => {
         const morseChars = mapping.morse.split('');
         morseChars.forEach((mChar, index) => {
-            let note = null;
-            let duration = getDurationInBeats(mChar, timeSignature);
-
-            // Special handling for quarter notes crossing bar boundaries
-            if (mChar === '-' && currentBarBeats === beatsPerBar - 0.5) {
-                // Split quarter note into two tied eighth notes
-                const note1 = new StaveNote({ keys: ['b/4'], duration: '8', stem_direction: 1 });
-                const note2 = new StaveNote({ keys: ['b/4'], duration: '8', stem_direction: 1 });
-                
-                // Add lyric to the first part of the split note if needed
-                if (index === 0 && mapping.char !== ' ' && mapping.char !== '/') {
-                    addLyricToNote(note1, mapping.char, Annotation, Flow);
-                }
-
-                currentBarNotes.push(note1);
-                bars.push(currentBarNotes);
-                
-                currentBarNotes = [note2];
-                currentBarBeats = 0.5;
-                
-                ties.push({ first: note1, last: note2 });
-                return;
-            }
-
             if (mChar === '.') {
-                note = new StaveNote({ keys: ['b/4'], duration: '8', stem_direction: 1 });
+                sequence.push({ type: 'note', duration: 1, mChar: '.', lyric: (index === 0 && mapping.char !== ' ' && mapping.char !== '/') ? mapping.char : null });
             } else if (mChar === '-') {
-                note = new StaveNote({ keys: ['b/4'], duration: '4', stem_direction: 1 });
+                sequence.push({ type: 'note', duration: 2, mChar: '-', lyric: (index === 0 && mapping.char !== ' ' && mapping.char !== '/') ? mapping.char : null });
             } else if (mChar === '/' || mChar === ' ') {
-                note = new StaveNote({ keys: ['b/4'], duration: '8r', stem_direction: 1 });
-            }
-
-            if (note) {
-                // Add lyric annotation to the first note of the Morse sequence for this character
-                if (index === 0 && mapping.char !== ' ' && mapping.char !== '/') {
-                    addLyricToNote(note, mapping.char, Annotation, Flow);
-                }
-
-                if (currentBarBeats + duration > beatsPerBar + 0.01) { // Add small epsilon for float precision
-                    if (currentBarNotes.length > 0) {
-                        bars.push(currentBarNotes);
-                        currentBarNotes = [];
-                        currentBarBeats = 0;
-                    }
-                }
-                currentBarNotes.push(note);
-                currentBarBeats += duration;
+                sequence.push({ type: 'rest', duration: 1, mChar: ' ', lyric: null });
             }
         });
-        
-        // Add a small gap (rest) after each letter, unless it's a space character itself
-        if (mapping.char !== ' ' && mapping.char !== '/') {
-             let spaceNote = new StaveNote({ keys: ['b/4'], duration: '8r', stem_direction: 1 });
-             let spaceDuration = 0.5;
-             if (currentBarBeats + spaceDuration > beatsPerBar + 0.01) {
-                if (currentBarNotes.length > 0) {
-                    bars.push(currentBarNotes);
-                    currentBarNotes = [];
-                    currentBarBeats = 0;
-                }
-            }
-            currentBarNotes.push(spaceNote);
-            currentBarBeats += spaceDuration;
+        // Inter-character gap (only add if not the last character)
+        const isLastChar = mapIdx === displayMappings.length - 1;
+        if (mapping.char !== ' ' && mapping.char !== '/' && !isLastChar) {
+            sequence.push({ type: 'rest', duration: 1, mChar: ' ', lyric: null, isGap: true });
         }
+    });
+
+    console.log("Sequence for debugging:", sequence.map(s => `${s.type}:${s.duration}`).join(', '));
+
+    // 2. Group into bars with splitting
+    const barData = [];
+    let currentBar = [];
+    let currentUnits = 0;
+    let previousSplitNote = null;
+
+    sequence.forEach(event => {
+        let remaining = event.duration;
+        let isFirstPart = true;
+
+        while (remaining > 0) {
+            let available = unitsPerBar - currentUnits;
+
+            // If the current bar is full, push it and start a new one
+            if (available === 0) {
+                barData.push(currentBar);
+                currentBar = [];
+                currentUnits = 0;
+                available = unitsPerBar;
+            }
+
+            let take = Math.min(remaining, available);
+
+            // Check if we need to split a note
+            if (take < remaining && event.type === 'note') {
+                // We're splitting a note across bars
+                const notePart = {
+                    ...event,
+                    duration: take,
+                    lyric: isFirstPart ? event.lyric : null,
+                    isSplit: true,
+                    splitPart: isFirstPart ? 'first' : 'middle'
+                };
+
+                if (isFirstPart) {
+                    notePart.tieNext = true;
+                    previousSplitNote = notePart;
+                }
+
+                currentBar.push(notePart);
+                remaining -= take;
+                currentUnits += take;
+                isFirstPart = false;
+            } else {
+                // Event fits completely in current bar, or it's the last part of a split
+                const notePart = {
+                    ...event,
+                    duration: take,
+                    lyric: isFirstPart ? event.lyric : null
+                };
+
+                if (!isFirstPart && event.type === 'note') {
+                    notePart.isSplit = true;
+                    notePart.splitPart = 'last';
+                }
+
+                currentBar.push(notePart);
+                remaining -= take;
+                currentUnits += take;
+                previousSplitNote = null;
+            }
+        }
+    });
+
+    // Final padding
+    if (currentUnits > 0 || barData.length === 0) {
+        while (currentUnits < unitsPerBar) {
+            let pad = Math.min(2, unitsPerBar - currentUnits);
+            currentBar.push({ type: 'rest', duration: pad, isPadding: true });
+            currentUnits += pad;
+        }
+        barData.push(currentBar);
+    }
+
+    console.log("Bar data for debugging:");
+    barData.forEach((bar, i) => {
+        const totalUnits = bar.reduce((sum, note) => sum + note.duration, 0);
+        console.log(`Bar ${i + 1}: ${totalUnits} units - ${bar.map(n => `${n.type}:${n.duration}`).join(', ')}`);
+    });
+
+    // 3. Convert barData to VexFlow bars and calculate timings
+    const bars = [];
+    const ties = [];
+    noteTimings = [];
+    let currentTime = 0;
+    const bpm = 120;
+    const secondsPerBeat = 60 / bpm;
+    let lastTieNote = null;
+
+    barData.forEach((barNotesData, barIndex) => {
+        const barNotes = [];
+        console.log(`Creating VexFlow notes for Bar ${barIndex + 1}:`);
+        barNotesData.forEach((data, noteIndex) => {
+            let note = null;
+            let durationStr = data.duration === 1 ? '8' : '4';
+            if (data.type === 'rest') durationStr += 'r';
+
+            console.log(`  Note ${noteIndex + 1}: type=${data.type}, duration=${data.duration}, vexDuration=${durationStr}, mChar=${data.mChar}`);
+
+            note = new StaveNote({
+                keys: ['b/4'],
+                duration: durationStr,
+                stem_direction: 1
+            });
+
+            if (data.lyric) {
+                addLyricToNote(note, data.lyric, Annotation, Flow);
+                console.log(`    Added lyric: ${data.lyric}`);
+            }
+
+            barNotes.push(note);
+            console.log(`    Note object created successfully, barNotes.length now: ${barNotes.length}`);
+
+            // Handle ties for split notes
+            if (data.tieNext) {
+                lastTieNote = note;
+            }
+            if (data.isSplit && data.splitPart === 'last' && lastTieNote) {
+                ties.push({ first: lastTieNote, last: note });
+                lastTieNote = null;
+            }
+
+            // Timing
+            noteTimings.push({
+                time: currentTime,
+                duration: data.duration * 0.5 * secondsPerBeat,
+                isRest: data.type === 'rest',
+                type: data.mChar || (data.isPadding ? 'padding' : ' ')
+            });
+            currentTime += data.duration * 0.5 * secondsPerBeat;
+        });
+        bars.push(barNotes);
     });
 
     // Helper function to add lyric
@@ -223,11 +305,7 @@ function updateStaff(mappings) {
         }
     }
 
-    if (currentBarNotes.length > 0) {
-        bars.push(currentBarNotes);
-    }
-
-    const staveWidth = 250;
+    const staveWidth = 300;
     const containerWidth = Math.max(800, document.getElementById('staff-container').offsetWidth - 40); // fallback to 800 if 0
     console.log("Container width:", containerWidth);
     const stavesPerRow = Math.max(1, Math.floor(containerWidth / staveWidth));
@@ -282,17 +360,30 @@ function updateStaff(mappings) {
                 }
                 stave.setContext(currentContext).draw();
 
+                // Calculate actual beats in this bar
+                const actualBeats = barNotes.reduce((sum, note) => {
+                    const dur = note.getDuration();
+                    if (dur === '8' || dur === '8r') return sum + 0.5;
+                    if (dur === '4' || dur === '4r') return sum + 1;
+                    if (dur === '2' || dur === '2r') return sum + 2;
+                    if (dur === '1' || dur === '1r') return sum + 4;
+                    return sum;
+                }, 0);
+
+                console.log(`Bar ${index + 1}: Adding ${barNotes.length} notes to voice, total beats: ${actualBeats}, expected: ${beatsPerBar}`);
+
                 const voice = new Voice({
                     num_beats: beatsPerBar,
                     beat_value: beatValue
                 }).setMode(Voice.Mode.SOFT);
 
                 voice.addTickables(barNotes);
-                
+
                 // Use formatter to justify notes within the bar
-                new Formatter().joinVoices([voice]).format([voice], staveWidth - 50);
-                
+                new Formatter().joinVoices([voice]).format([voice], staveWidth - 60);
+
                 voice.draw(currentContext, stave);
+                console.log(`Bar ${index + 1}: Successfully drawn`);
                 
             } catch (e) {
                 console.error("Error drawing bar " + index, e);
@@ -348,58 +439,6 @@ function updateStaff(mappings) {
 
     // Re-collect elements across all row containers
     noteElements = Array.from(staffOutput.querySelectorAll('.vf-stavenote'));
-    
-    // Calculate timings for playback (in seconds, assuming 120 BPM)
-    const bpm = 120;
-    const secondsPerBeat = 60 / bpm;
-    let currentTime = 0;
-    
-    displayMappings.forEach(mapping => {
-        const morseChars = mapping.morse.split('');
-        morseChars.forEach((mChar, index) => {
-            let duration = getDurationInBeats(mChar, timeSignature);
-            if (duration > 0) {
-                // If this note was split across bars in the visual representation,
-                // we should ideally split its visual highlight too.
-                // But for simplicity, we map the Morse character to its timing.
-                
-                if (mChar === '-' && (currentTime / secondsPerBeat) % beatsPerBar === beatsPerBar - 0.5) {
-                    // This matches the split logic in the visual part
-                    noteTimings.push({
-                        time: currentTime,
-                        duration: 0.5 * secondsPerBeat,
-                        isRest: false,
-                        type: '8' // first half of split quarter
-                    });
-                    noteTimings.push({
-                        time: currentTime + 0.5 * secondsPerBeat,
-                        duration: 0.5 * secondsPerBeat,
-                        isRest: false,
-                        type: '8' // second half of split quarter
-                    });
-                } else {
-                    noteTimings.push({
-                        time: currentTime,
-                        duration: duration * secondsPerBeat,
-                        isRest: (mChar === '/' || mChar === ' '),
-                        type: mChar
-                    });
-                }
-                currentTime += duration * secondsPerBeat;
-            }
-        });
-        // Add the inter-character gap timing
-        if (mapping.char !== ' ' && mapping.char !== '/') {
-            let spaceDuration = 0.5;
-            noteTimings.push({
-                time: currentTime,
-                duration: spaceDuration * secondsPerBeat,
-                isRest: true,
-                type: ' '
-            });
-            currentTime += spaceDuration * secondsPerBeat;
-        }
-    });
 }
 
 function playNote(freq, startTime, duration) {
@@ -536,6 +575,10 @@ function generateMIDI(text) {
             track.addEvent(new MidiWriter.NoteEvent({ pitch: ['B4'], duration: '0', wait: '8' }));
         }
     });
+
+    // Note: The visual staff and audio playback now pad bars with rests.
+    // MIDI generation currently follows the Morse sequence directly without bar padding.
+    // This is generally preferred for MIDI files unless a specific rhythm/meter is required.
 
     const write = new MidiWriter.Writer(track);
     return write.dataUri();
