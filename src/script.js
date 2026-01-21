@@ -411,16 +411,20 @@ function playNote(freq, startTime, duration) {
     osc.type = 'sine';
     osc.frequency.setValueAtTime(freq, startTime);
 
+    const attackTime = 0.01;
+    const releaseTime = 0.01;
+    const actualDuration = Math.max(duration, attackTime + releaseTime + 0.01);
+
     gain.gain.setValueAtTime(0, startTime);
-    gain.gain.linearRampToValueAtTime(0.2, startTime + 0.01);
-    gain.gain.setValueAtTime(0.2, startTime + duration - 0.01);
-    gain.gain.linearRampToValueAtTime(0, startTime + duration);
+    gain.gain.linearRampToValueAtTime(0.2, startTime + attackTime);
+    gain.gain.setValueAtTime(0.2, startTime + actualDuration - releaseTime);
+    gain.gain.linearRampToValueAtTime(0, startTime + actualDuration);
 
     osc.connect(gain);
     gain.connect(audioContext.destination);
 
     osc.start(startTime);
-    osc.stop(startTime + duration);
+    osc.stop(startTime + actualDuration);
     
     activeOscillators.push(osc);
     osc.onended = () => {
