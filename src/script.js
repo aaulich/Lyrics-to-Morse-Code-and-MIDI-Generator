@@ -148,7 +148,6 @@ function updateStaff(mappings) {
     const barData = [];
     let currentBar = [];
     let currentUnits = 0;
-    let previousSplitNote = null;
 
     sequence.forEach(event => {
         let remaining = event.duration;
@@ -175,13 +174,9 @@ function updateStaff(mappings) {
                     duration: take,
                     lyric: isFirstPart ? event.lyric : null,
                     isSplit: true,
-                    splitPart: isFirstPart ? 'first' : 'middle'
+                    splitPart: isFirstPart ? 'first' : 'middle',
+                    tieNext: true
                 };
-
-                if (isFirstPart) {
-                    notePart.tieNext = true;
-                    previousSplitNote = notePart;
-                }
 
                 currentBar.push(notePart);
                 remaining -= take;
@@ -203,7 +198,6 @@ function updateStaff(mappings) {
                 currentBar.push(notePart);
                 remaining -= take;
                 currentUnits += take;
-                previousSplitNote = null;
             }
         }
     });
@@ -247,12 +241,19 @@ function updateStaff(mappings) {
             barNotes.push(note);
 
             // Handle ties for split notes
+            if (data.isSplit && data.splitPart !== 'first') {
+                if (lastTieNote) {
+                    ties.push({ first: lastTieNote, last: note });
+                }
+                lastTieNote = null;
+            } else {
+                // Not a continuation part (could be a rest, a non-split note, or a 'first' part)
+                // Clear any pending tie from a previous bar that didn't find its continuation
+                lastTieNote = null;
+            }
+
             if (data.tieNext) {
                 lastTieNote = note;
-            }
-            if (data.isSplit && data.splitPart === 'last' && lastTieNote) {
-                ties.push({ first: lastTieNote, last: note });
-                lastTieNote = null;
             }
 
             // Timing
@@ -384,22 +385,16 @@ function updateStaff(mappings) {
                         last_indices: [0],
                     }).setContext(contexts[firstRow]).draw();
                 } else {
-                    // Tie across rows: draw half tie in both?
-                    // VexFlow doesn't easily support half-ties.
-                    // For now, let's draw it in the first row's context. 
-                    // It will likely be clipped, but it's better than nothing.
+                    // Tie across rows: draw half-ties in both rows
+                    // Part 1: Draw from the first note to the end of its row
                     new StaveTie({
                         first_note: t.first,
-                        last_note: t.last,
                         first_indices: [0],
-                        last_indices: [0],
                     }).setContext(contexts[firstRow]).draw();
                     
-                    // And maybe in the second row's context too?
+                    // Part 2: Draw from the beginning of the next row to the last note
                     new StaveTie({
-                        first_note: t.first,
                         last_note: t.last,
-                        first_indices: [0],
                         last_indices: [0],
                     }).setContext(contexts[lastRow]).draw();
                 }
